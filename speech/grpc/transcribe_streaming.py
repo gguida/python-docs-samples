@@ -17,6 +17,7 @@
 from __future__ import division
 
 import contextlib
+import Queue
 import re
 import threading
 
@@ -58,9 +59,28 @@ def make_channel(host, port):
     return implementations.secure_channel(host, port, composite_channel)
 
 
+class Readable():
+    def __init__(self, q):
+        self.q = q
+
+    def read(self, *args):
+        data = [self.q.get()]
+        while True:
+            try:
+                data.append(self.q.get(block=False))
+            except Queue.Empty:
+                break
+        return b''.join(data)
+
+def fill_buffer(audio_stream, q, chunk, stop_audio):
+    while not stop_audio.is_set():
+        data = audio_stream.read(chunk)
+        q.put(data)
+
+
 # [START audio_stream]
 @contextlib.contextmanager
-def record_audio(channels, rate, chunk):
+def record_audio(channels, rate, chunk, stop_audio):
     """Opens a recording stream in a context manager."""
     audio_interface = pyaudio.PyAudio()
     audio_stream = audio_interface.open(
@@ -68,7 +88,13 @@ def record_audio(channels, rate, chunk):
         input=True, frames_per_buffer=chunk,
     )
 
-    yield audio_stream
+    q = Queue.Queue()
+    buff = Readable(q)
+    fill_buffer_thread = threading.Thread(target=fill_buffer,
+            args=(audio_stream, q, chunk, stop_audio))
+    fill_buffer_thread.start()
+
+    yield buff
 
     audio_stream.stop_stream()
     audio_stream.close()
@@ -105,7 +131,7 @@ def request_stream(stop_audio, channels=CHANNELS, rate=RATE, chunk=CHUNK):
     yield cloud_speech.StreamingRecognizeRequest(
         streaming_config=streaming_config)
 
-    with record_audio(channels, rate, chunk) as audio_stream:
+    with record_audio(channels, rate, chunk, stop_audio) as audio_stream:
         while not stop_audio.is_set():
             data = audio_stream.read(chunk)
             if not data:
