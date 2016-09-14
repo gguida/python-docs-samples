@@ -24,15 +24,7 @@ at https://cloud.google.com/pubsub/docs.
 # [START quickstart]
 from gcloud import pubsub
 
-pubsub_client = pubsub.Client.from_service_account_json(
-    # Path to Service Account file. Defaults to the value of the
-    # GOOGLE_APPLICATION_CREDENTIALS environment variable.
-    '/path/to/keyfile.json',
-
-    # Your Project ID. Defaults to the value of the
-    # GCLOUD_PROJECT environment variable.
-    project='your-project-id'
-)
+pubsub_client = pubsub.Client()
 
 topic = pubsub_client.topic('my-new-topic')
 topic.create()
